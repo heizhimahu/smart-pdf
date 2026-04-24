@@ -26,7 +26,6 @@
 | 后端 | FastAPI (Python) |
 | 文档转换 | LibreOffice (headless 命令行模式) |
 | 图像处理 | OpenCV Inpainting (Telea 算法) |
-| AI 增强 | 通义万相 / DashScope（可选，可配置 API Key） |
 | PDF 合成 | pypdf + reportlab |
 
 ## 快速开始
@@ -115,5 +114,4 @@ smart-pdf/
 ## 配置说明
 
 - **后端端口**：默认 `8002`，可在启动命令中修改 `--port`
-- **AI API Key**：可选配置，设置环境变量 `DASHSCOPE_API_KEY` 启用通义万相
-- **LibreOffice 路径**：在 `backend/main.py` 中修改 `LIBREOFFICE_PATH` 变量
+- **LibreOffice 路径**：在 `backend/main.py` 中修改 `LIBREOFFICE_PATH` 变量，或设置同名的环境变量覆盖

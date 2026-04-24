@@ -7,5 +7,3 @@ opencv-python==4.10.0.84
 numpy==2.2.1
 pypdf==5.1.0
 reportlab==4.3.1
-dashscope==1.23.1
-requests==2.32.3

@@ -10,7 +10,7 @@ import os
 import base64
 import logging
 from typing import Optional, Dict
-from PIL import Image, ImageDraw
+from PIL import Image
 import numpy as np
 import cv2
 import uuid
@@ -35,27 +35,6 @@ session_creation_time: Dict[str, datetime] = {}
 # 存储原始 PDF 页面尺寸（点）：{session_id: {page: (width_pts, height_pts)}}
 page_pts_sizes: Dict[str, Dict[int, tuple]] = {}
 SESSION_EXPIRE_MINUTES = 30  # 会话过期时间（分钟）
-
-# AI 配置
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-AI_MODEL = os.getenv("AI_MODEL", "qwen-vl-plus")
-USE_SIMULATION = not DASHSCOPE_API_KEY  # 如果没有 API 密钥，使用模拟模式
-
-if USE_SIMULATION:
-    logger.warning("DASHSCOPE_API_KEY 未设置，将使用模拟模式进行 AI 处理")
-    logger.warning("请设置环境变量: export DASHSCOPE_API_KEY=your_api_key")
-else:
-    logger.info(f"AI 模型配置: {AI_MODEL}")
-    # 导入 DashScope
-    try:
-        import dashscope
-        from dashscope import MultiModalConversation, ImageSynthesis
-        dashscope.api_key = DASHSCOPE_API_KEY
-        logger.info("DashScope SDK 加载成功")
-        logger.info(f"通义万相图像编辑模型: {ImageSynthesis.Models.wanx_2_1_imageedit}")
-    except ImportError:
-        logger.error("DashScope SDK 未安装，请运行: pip install dashscope")
-        USE_SIMULATION = True
 
 # 配置 CORS 跨域
 app.add_middleware(
@@ -103,11 +82,7 @@ class SavePageImageResponse(BaseModel):
     session_id: str
 
 
-# ============ 新增：初始化会话请求模型 ============
-class InitSessionRequest(BaseModel):
-    pass  # 无需参数
-
-
+# ============ 初始化会话响应模型 ============
 class InitSessionResponse(BaseModel):
     success: bool
     session_id: str
@@ -548,73 +523,6 @@ def local_inpainting(image_data: bytes, image_base64: str, startX: float, startY
         }
 
 
-def create_mask_image(width: int, height: int, startX: float, startY: float, endX: float, endY: float) -> bytes:
-    """
-    创建掩码图像：选区为白色，其他为黑色
-    返回 PNG 格式的字节数据
-    """
-    # 创建黑色背景
-    mask = Image.new('RGB', (width, height), color='black')
-    draw = ImageDraw.Draw(mask)
-    
-    # 确保坐标在图像范围内
-    x1 = max(0, min(int(startX), width - 1))
-    y1 = max(0, min(int(startY), height - 1))
-    x2 = max(0, min(int(endX), width - 1))
-    y2 = max(0, min(int(endY), height - 1))
-    
-    # 确保 start < end
-    if x1 > x2:
-        x1, x2 = x2, x1
-    if y1 > y2:
-        y1, y2 = y2, y1
-    
-    # 在选区位置画白色矩形
-    if x2 > x1 and y2 > y1:
-        draw.rectangle([(x1, y1), (x2, y2)], fill='white')
-        logger.info(f"创建掩码图像: 选区 ({x1}, {y1}) - ({x2}, {y2})")
-    
-    # 保存为 PNG 字节
-    buffered = io.BytesIO()
-    mask.save(buffered, format="PNG")
-    return buffered.getvalue()
-
-
-def download_image_from_url(url: str, timeout: int = 30) -> bytes:
-    """
-    从 URL 下载图像
-    """
-    import requests
-    try:
-        response = requests.get(url, timeout=timeout)
-        if response.status_code == 200:
-            logger.info(f"下载图像成功: {len(response.content)} 字节")
-            return response.content
-        else:
-            logger.error(f"下载图像失败: {response.status_code}")
-            return None
-    except Exception as e:
-        logger.error(f"下载图像异常: {e}")
-        return None
-
-
-def call_dashscope_ai(image_base64: str, startX: float, startY: float, endX: float, endY: float) -> dict:
-    """
-    使用本地 OpenCV inpainting 进行图像修复（手写移除）
-    通义万相图像编辑 API 在测试中会导致文字扭曲，所以默认使用本地处理
-    """
-    logger.info("使用本地图像修复（OpenCV inpainting）")
-    try:
-        # 解码 Base64 图像
-        image_data = base64.b64decode(image_base64)
-        return local_inpainting(image_data, image_base64, startX, startY, endX, endY)
-    except Exception as e:
-        error_msg = f"AI 处理异常: {str(e)}"
-        logger.error(error_msg)
-        import traceback
-        logger.error(traceback.format_exc())
-        return simulate_ai_processing(image_base64, startX, startY, endX, endY)
-
 
 @app.post("/remove-handwriting", response_model=RemoveHandwritingResponse)
 async def remove_handwriting(request: RemoveHandwritingRequest):
@@ -633,12 +541,6 @@ async def remove_handwriting(request: RemoveHandwritingRequest):
     logger.info(f"  - 图片大小: {len(image_base64)} 字符")
     logger.info(f"  - 选区坐标: ({request.startX}, {request.startY}) -> ({request.endX}, {request.endY})")
     logger.info(f"  - 页码: {request.page}")
-    
-    # 调试信息
-    logger.info(f"USE_SIMULATION: {USE_SIMULATION}")
-    logger.info(f"DASHSCOPE_API_KEY 存在: {bool(DASHSCOPE_API_KEY)}")
-    if DASHSCOPE_API_KEY:
-        logger.info(f"API 密钥长度: {len(DASHSCOPE_API_KEY)}")
     
     # 检查选区尺寸
     width = abs(request.endX - request.startX)
