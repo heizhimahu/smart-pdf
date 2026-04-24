@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.git
+test_*
+*.md
+*.pdf
+*.png
+*.docx
+start_*.ps1
+start_*.bat
